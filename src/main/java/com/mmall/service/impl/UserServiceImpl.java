@@ -1,5 +1,6 @@
 package com.mmall.service.impl;
 
+import com.github.pagehelper.StringUtil;
 import com.mmall.common.Const;
 import com.mmall.common.ServerResponse;
 import com.mmall.common.TokenCache;
@@ -38,13 +39,12 @@ public class UserServiceImpl implements IUserService {
         if (usernameCount == 0) {
             return ServerResponse.createByErrorMessage("用户名不存在");
         }
-        //TODO 密码MD5加密
         String passwordNew = MD5Util.MD5EncodeUtf8(password);
         User user = userMapper.selectLogin(username, passwordNew);
         if (user == null) {
             return ServerResponse.createByErrorMessage("密码不正确");
         }
-        //程序走到这里说明密码和用户名都是正确的，然后将密码置空
+        //程序走到这里说明密码和用户名都是正确的，然后将密码置空,不然返回信息的时候直接把密码也返回了
         user.setPassword(StringUtils.EMPTY);
         return ServerResponse.createBySuccess("登陆成功", user);
     }
@@ -134,19 +134,78 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public ServerResponse<String> forgetResetPassword(String username, String password, String forgetToken) {
+        if (StringUtils.isBlank(forgetToken)) {
+            return ServerResponse.createByErrorMessage("参数错误,Token需要传值");
+        }
         ServerResponse validResponse = this.checkValid(username, Const.USERNAME);
         if (validResponse.isSuccess()) {
             return ServerResponse.createByErrorMessage("用户名不存在的");
         }
         String passwordNew = MD5Util.MD5EncodeUtf8(password);
-        if (StringUtils.equals(TokenCache.TOKEN_PREFIX + username, forgetToken)) {
+        String token = TokenCache.getKey(TokenCache.TOKEN_PREFIX+username);
+        if (StringUtils.isBlank(token)) {
+            return ServerResponse.createByErrorMessage("token无效或者过期");
+        }
+        if (StringUtils.equals(token, forgetToken)) {
             int rowCount = userMapper.updateForgetResetPassword(username, passwordNew);
             if (rowCount > 0) {
-                return ServerResponse.createBySuccess("忘记密码重置成功");
+                return ServerResponse.createBySuccessMessage("忘记密码修改成功");
             }
         } else {
-            return ServerResponse.createByErrorMessage("token过期失效");
+            return ServerResponse.createByErrorMessage("token错误,请重新获取重置密码的token");
         }
-        return ServerResponse.createByErrorMessage("忘记密码重置失败");
+        return ServerResponse.createByErrorMessage("忘记密码修改失败");
     }
+
+    @Override
+    public ServerResponse<String> updateLoginPassword(User user, String passwordOld, String passwordNew) {
+
+        //防止横向越权,要校验一下这个用户的旧密码,一定要指定是这个用户.因为我们会查询一个count(1),如果不指定id,那么结果就是true啦count>0;
+        int resultCount = userMapper.checkPassword(user.getId(), MD5Util.MD5EncodeUtf8(passwordOld));
+        if (resultCount == 0) {
+            return ServerResponse.createByErrorMessage("旧密码错误");
+        }
+
+        user.setPassword(MD5Util.MD5EncodeUtf8(passwordNew));
+        int updateCount = userMapper.updateByPrimaryKeySelective(user);
+        if (updateCount > 0) {
+            return ServerResponse.createBySuccessMessage("密码更新成功");
+        }
+        return ServerResponse.createByErrorMessage("密码更新失败");
+    }
+
+    @Override
+    public ServerResponse<User> updateInformation(User user) {
+        //校验传过来的用户的email和手机号是不是在数据库中已经存在了，并且和当前登录的用户的email不一样
+        //不用担心和当前用户的一样，没关系，和当前的用户的信息一样说明部分信息没更改，也不需要全部更改
+        int rowCount = userMapper.checkEmailByUserId(user.getId(), user.getEmail());
+        if (rowCount > 0) {
+            return ServerResponse.createByErrorMessage("用户名已存在");
+        }
+        //创建一个user类。将信息都封装好。传入查询语句
+        User updateUser = new User();
+        updateUser.setId(user.getId());
+        updateUser.setEmail(user.getEmail());
+        updateUser.setPhone(user.getPhone());
+        updateUser.setAnswer(user.getAnswer());
+        updateUser.setQuestion(user.getQuestion());
+        int i = userMapper.updateByPrimaryKeySelective(user);
+        if (i > 0) {
+            return ServerResponse.createBySuccess("个人信息更新成功",updateUser);
+        }
+        return ServerResponse.createByErrorMessage("个人信息更新失败");
+    }
+
+    @Override
+    public ServerResponse<User> getInformation(Integer userId) {
+        User user = userMapper.selectByPrimaryKey(userId);
+        if (user == null) {
+            return ServerResponse.createByErrorMessage("找不到当前的用户");
+        }
+        //将密码置空
+        user.setPassword(StringUtils.EMPTY);
+
+        return ServerResponse.createBySuccess(user);
+    }
+
 }

@@ -151,14 +151,12 @@
       update_time = now()
     where id = #{id,jdbcType=INTEGER}
   </update>
-
-
     <select id="checkUsername" resultType="int" parameterType="string">
     select count(1) from mmall_user
     where username = #{username}
   </select>
 
-    <select id="selectLogin" parameterType="java.lang.String" resultType="com.mmall.pojo.User">
+    <select id="selectLogin" parameterType="string" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
         from mmall_user
@@ -166,10 +164,9 @@
     </select>
     <select id="checkEmail" parameterType="java.lang.String" resultType="java.lang.Integer">
         SELECT
-        <include refid="Base_Column_List"/>
+        count(*)
         from mmall_user
         WHERE email=#{email}
-
     </select>
     <select id="selectQuestion" parameterType="java.lang.String" resultType="string">
       select question from mmall_user where username=#{username}
@@ -181,4 +178,10 @@
     <update id="updateForgetResetPassword" parameterType="string" >
         update mmall_user set password=#{passwordNew},update_time=now() where username=#{username}
     </update>
+    <select id="checkPassword" parameterType="map" resultType="int">
+        select count(*) from mmall_user where id=#{userId} and password =#{passwordOld}
+    </select>
+    <select id="checkEmailByUserId" parameterType="map" resultType="int" >
+          select count(*) from mmall_user where id!=#{userId} and email=#{email}
+    </select>
 </mapper>
